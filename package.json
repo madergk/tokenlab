@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck",
+    "release:ship": "bash scripts/release.sh"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

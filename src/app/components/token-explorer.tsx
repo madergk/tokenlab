@@ -241,6 +241,21 @@ export function TokenExplorer() {
             </div>
           </div>
 
+          {/* Search bar */}
+          <div className="relative mb-[10px]">
+            <Search
+              size={14}
+              className="absolute left-[10px] top-1/2 -translate-y-1/2 text-[#a1a1aa] pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tokens by name, value or reference…"
+              className="w-full pl-[32px] pr-[10px] py-[7px] rounded-[8px] border border-[#e4e4e7] bg-[#fafafa] text-[13px] text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-2 focus:ring-[#09090b]/20 focus:border-[#09090b]/40 transition-colors"
+            />
+          </div>
+
           {/* Framework selector */}
           <FrameworkSelector
             libraries={tokenLibraries}
@@ -359,7 +374,7 @@ export function TokenExplorer() {
               );
               return (
                 <ColorCollectionCard
-                  key={`${activeLibraryId}-${filtIdx}`}
+                  key={`${activeLibraryId}-${collection.baseColor}`}
                   collection={collection}
                   editable={editMode}
                   onBaseColorChange={(val) =>

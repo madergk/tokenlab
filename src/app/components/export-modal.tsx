@@ -2,8 +2,9 @@ import { useState } from "react";
 import { X, Copy, Check, Download, FileJson, FileCode } from "lucide-react";
 import type { TokenLibrary } from "./token-libraries";
 import type { ColorCollection } from "./color-utils";
+import { useOpenInFigma } from "../hooks/use-open-figma";
 
-type ExportFormat = "dtcg" | "css" | "scss" | "json" | "tailwind" | "js";
+type ExportFormat = "dtcg" | "css" | "scss" | "json" | "tailwind" | "js" | "figma";
 
 interface ExportModalProps {
   library: TokenLibrary;
@@ -12,8 +13,7 @@ interface ExportModalProps {
 }
 
 function generateCSS(
-  collections: ColorCollection[],
-  prefix: string
+  collections: ColorCollection[]
 ): string {
   let css = `:root {\n`;
   for (const col of collections) {
@@ -33,8 +33,7 @@ function generateCSS(
 }
 
 function generateSCSS(
-  collections: ColorCollection[],
-  prefix: string
+  collections: ColorCollection[]
 ): string {
   let scss = `// Color Tokens\n\n`;
   for (const col of collections) {
@@ -99,6 +98,133 @@ function generateDTCG(collections: ColorCollection[]): string {
   return JSON.stringify(obj, null, 2);
 }
 
+function hexToFigmaColor(hex: string) {
+  const cleanHex = hex.replace("#", "");
+  const expanded =
+    cleanHex.length === 3
+      ? cleanHex
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : cleanHex;
+  const rgbHex = expanded.slice(0, 6);
+  const alphaHex = expanded.length >= 8 ? expanded.slice(6, 8) : "FF";
+  const r = parseInt(rgbHex.slice(0, 2), 16) / 255;
+  const g = parseInt(rgbHex.slice(2, 4), 16) / 255;
+  const b = parseInt(rgbHex.slice(4, 6), 16) / 255;
+  const a = parseInt(alphaHex, 16) / 255;
+  return { r, g, b, a };
+}
+
+function generateFigmaVariables(collections: ColorCollection[]): string {
+  const modeId = "Mode:Light";
+  const variables: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      key: string;
+      variableCollectionId: string;
+      resolvedType: "COLOR";
+      valuesByMode: Record<string, { r: number; g: number; b: number; a: number }>;
+      remote: boolean;
+      description?: string;
+      hiddenFromPublishing: boolean;
+      scopes: string[];
+    }
+  > = {};
+  const variableCollections: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      key: string;
+      modes: { modeId: string; name: string }[];
+      defaultModeId: string;
+      remote: boolean;
+      hiddenFromPublishing: boolean;
+      variableIds: string[];
+      isExtension: boolean;
+      variableOverrides: Record<string, never>;
+    }
+  > = {};
+
+  collections.forEach((col, collectionIndex) => {
+    const collectionId = `Collection:${collectionIndex + 1}`;
+    const variableIds: string[] = [];
+
+    const addVariable = (name: string, value: string, description?: string) => {
+      const variableId = `Variable:${collectionIndex + 1}:${variableIds.length + 1}`;
+      variableIds.push(variableId);
+      variables[variableId] = {
+        id: variableId,
+        name,
+        key: name,
+        variableCollectionId: collectionId,
+        resolvedType: "COLOR",
+        valuesByMode: {
+          [modeId]: hexToFigmaColor(value),
+        },
+        remote: false,
+        description,
+        hiddenFromPublishing: false,
+        scopes: ["ALL_FILLS"],
+      };
+    };
+
+    addVariable(col.baseColor, col.baseValue);
+    col.variables.forEach((v) => addVariable(v.name, v.value, v.reference));
+
+    variableCollections[collectionId] = {
+      id: collectionId,
+      name: col.name,
+      key: col.name,
+      modes: [{ modeId, name: "Light" }],
+      defaultModeId: modeId,
+      remote: false,
+      hiddenFromPublishing: false,
+      variableIds,
+      isExtension: false,
+      variableOverrides: {},
+    };
+  });
+
+  return JSON.stringify(
+    {
+      status: 200,
+      error: false,
+      meta: {
+        variables,
+        variableCollections,
+      },
+    },
+    null,
+    2
+  );
+}
+
+function generateTokensStudio(collections: ColorCollection[]): string {
+  const obj: Record<
+    string,
+    Record<string, { value: string; type: string; description?: string }>
+  > = {};
+  for (const col of collections) {
+    obj[col.name] = {};
+    obj[col.name][col.baseColor] = {
+      value: col.baseValue,
+      type: "color",
+    };
+    for (const v of col.variables) {
+      obj[col.name][v.name] = {
+        value: v.value,
+        type: "color",
+        ...(v.reference ? { description: v.reference } : {}),
+      };
+    }
+  }
+  return JSON.stringify(obj, null, 2);
+}
+
 function generateTailwindConfig(collections: ColorCollection[]): string {
   let config = `/** @type {import('tailwindcss').Config} */\nmodule.exports = {\n  theme: {\n    extend: {\n      colors: {\n`;
   for (const col of collections) {
@@ -132,6 +258,7 @@ function generateJS(collections: ColorCollection[]): string {
 }
 
 const formatOptions: { id: ExportFormat; label: string; ext: string }[] = [
+  { id: "figma", label: "Figma Variables (Native)", ext: ".figma.json" },
   { id: "dtcg", label: "DTCG (W3C)", ext: ".tokens.json" },
   { id: "css", label: "CSS Variables", ext: ".css" },
   { id: "scss", label: "SCSS", ext: ".scss" },
@@ -147,15 +274,21 @@ export function ExportModal({
 }: ExportModalProps) {
   const [format, setFormat] = useState<ExportFormat>("dtcg");
   const [copied, setCopied] = useState(false);
+  const [tokensStudioFormat, setTokensStudioFormat] = useState(false);
+  const { openInFigma, isOpening } = useOpenInFigma();
 
   const getOutput = () => {
     switch (format) {
+      case "figma":
+        return tokensStudioFormat
+          ? generateTokensStudio(collections)
+          : generateFigmaVariables(collections);
       case "dtcg":
         return generateDTCG(collections);
       case "css":
-        return generateCSS(collections, library.prefix);
+        return generateCSS(collections);
       case "scss":
-        return generateSCSS(collections, library.prefix);
+        return generateSCSS(collections);
       case "json":
         return generateJSON(collections);
       case "tailwind":
@@ -175,7 +308,9 @@ export function ExportModal({
 
   const handleDownload = () => {
     const selected = formatOptions.find((f) => f.id === format);
-    const name = library.id + "-tokens" + (selected?.ext || ".txt");
+    const extension =
+      format === "figma" && tokensStudioFormat ? ".tokens.json" : selected?.ext;
+    const name = library.id + "-tokens" + (extension || ".txt");
     const blob = new Blob([output], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -249,6 +384,27 @@ export function ExportModal({
             </button>
           ))}
         </div>
+        {format === "figma" && (
+          <div className="flex flex-wrap items-center justify-between gap-[8px] px-[24px] py-[12px] border-b border-[#e4e4e7] bg-white">
+            <div>
+              <p className="text-[12px] text-[#52525b]">
+                Native Figma Variables JSON for smoother import.
+              </p>
+              <p className="text-[11px] text-[#71717a]">
+                Token names are preserved exactly as shown in TokenLab.
+              </p>
+            </div>
+            <label className="flex items-center gap-[6px] text-[12px] text-[#52525b]">
+              <input
+                type="checkbox"
+                className="accent-[#09090b]"
+                checked={tokensStudioFormat}
+                onChange={(event) => setTokensStudioFormat(event.target.checked)}
+              />
+              Tokens Studio format (fallback)
+            </label>
+          </div>
+        )}
 
         {/* Code output */}
         <div className="flex-1 overflow-auto p-[24px] bg-[#fafafa]">
@@ -259,6 +415,18 @@ export function ExportModal({
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-[10px] px-[24px] py-[16px] border-t border-[#e4e4e7]">
+          {format === "figma" && (
+            <button
+              onClick={() => {
+                handleDownload();
+                openInFigma(output);
+              }}
+              className="flex items-center gap-[6px] px-[16px] py-[8px] rounded-[8px] bg-[#f4f4f5] text-[#52525b] hover:bg-[#e4e4e7] transition-colors cursor-pointer text-[13px]"
+            >
+              {isOpening ? <Check size={14} /> : <FileJson size={14} />}
+              {isOpening ? "Opened" : "Open in Figma"}
+            </button>
+          )}
           <button
             onClick={handleCopy}
             className="flex items-center gap-[6px] px-[16px] py-[8px] rounded-[8px] bg-[#f4f4f5] text-[#52525b] hover:bg-[#e4e4e7] transition-colors cursor-pointer text-[13px]"

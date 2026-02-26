@@ -5,6 +5,8 @@ export interface SelectedPalette {
   shades: { name: string; value: string }[];
 }
 
+import type { FoundationCategory } from "../../../data/foundation-tokens";
+
 export type Separator = "." | "-" | "/" | "_";
 export type Casing = "kebab" | "camel" | "snake" | "none";
 
@@ -375,7 +377,7 @@ export interface WizardState {
   importedFile?: ImportedTokenFile;
   importedSemanticFile?: ImportedSemanticFile;
   // Phase 4: foundation token categories to include in export
-  enabledFoundations: import("../../../data/foundation-tokens").FoundationCategory[];
+  enabledFoundations: FoundationCategory[];
 }
 
 // ===== Defaults =====

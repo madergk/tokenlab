@@ -353,7 +353,8 @@ export function tokensToCSS(tokens: GeneratedToken[], naming: NamingConfig): str
       css += `  /* ${group}${t.parts.variant ? ` / ${t.parts.variant}` : ""} */\n`;
       lastGroup = group;
     }
-    const varName = t.fullName.replace(/\./g, "-");
+    // Replace both dots and slashes — both are invalid in CSS custom property names
+    const varName = t.fullName.replace(/[./]/g, "-");
     const comment = t.primitiveRef ? ` /* ref: ${t.primitiveRef} */` : "";
     css += `  --${varName}: ${t.value};${comment}\n`;
   }
@@ -361,7 +362,7 @@ export function tokensToCSS(tokens: GeneratedToken[], naming: NamingConfig): str
   return css;
 }
 
-export function tokensToSCSS(tokens: GeneratedToken[], naming?: NamingConfig): string {
+export function tokensToSCSS(tokens: GeneratedToken[]): string {
   const primitiveRefs = new Set<string>();
   for (const t of tokens) {
     if (t.primitiveRef) primitiveRefs.add(t.primitiveRef);
@@ -374,7 +375,7 @@ export function tokensToSCSS(tokens: GeneratedToken[], naming?: NamingConfig): s
     scss += `// PRIMITIVE REFERENCES (from selected palettes)\n`;
     scss += `// ==========================================\n`;
     for (const ref of primitiveRefs) {
-      scss += `// $${ref.replace(/\./g, "-")}\n`;
+      scss += `// $${ref.replace(/[./]/g, "-")}\n`;
     }
     scss += `\n`;
   }
@@ -391,8 +392,8 @@ export function tokensToSCSS(tokens: GeneratedToken[], naming?: NamingConfig): s
       scss += `// ${group.toUpperCase()}${t.parts.variant ? `: ${t.parts.variant}` : ""}\n`;
       lastGroup = group;
     }
-    const comment = t.primitiveRef ? ` // ref: $${t.primitiveRef.replace(/\./g, "-")}` : "";
-    scss += `$${t.fullName.replace(/\./g, "-")}: ${t.value};${comment}\n`;
+    const comment = t.primitiveRef ? ` // ref: $${t.primitiveRef.replace(/[./]/g, "-")}` : "";
+    scss += `$${t.fullName.replace(/[./]/g, "-")}: ${t.value};${comment}\n`;
   }
   return scss;
 }

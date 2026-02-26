@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, Check, WandSparkles, ChevronLeft } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { STEP_LABELS, INITIAL_WIZARD_STATE } from "./wizard-types";
@@ -35,16 +35,18 @@ export function WizardLayout() {
   const location = useLocation();
   const locationState = (location.state ?? null) as WizardLocationState | null;
 
-  const initialState = useMemo(() => buildInitialState(locationState), []);
-  const [state, setState] = useState<WizardState>(initialState);
+  // Lazy initializer — runs once on mount, avoids useMemo([]) anti-pattern
+  const [state, setState] = useState<WizardState>(() => buildInitialState(locationState));
   const sourceLibrary = locationState?.sourceLibrary;
+  // Count pre-loaded palettes for the banner (derived from locationState, stable)
+  const preloadedCount = locationState?.preselectedPalettes?.length ?? 0;
 
   const step = state.currentStep;
   const totalSteps = STEP_LABELS.length;
 
-  const updateState = (partial: Partial<WizardState>) => {
+  const updateState = useCallback((partial: Partial<WizardState>) => {
     setState((prev) => ({ ...prev, ...partial }));
-  };
+  }, []);
 
   const canAdvance = (): boolean => {
     switch (step) {
@@ -182,11 +184,11 @@ export function WizardLayout() {
       <div className="flex-1 overflow-auto">
         <div className="max-w-[1280px] mx-auto px-[20px] md:px-[32px] py-[24px]">
           {/* Pre-loaded banner */}
-          {step === 0 && sourceLibrary && initialState.selectedPalettes.length > 0 && (
+          {step === 0 && sourceLibrary && preloadedCount > 0 && (
             <div className="mb-[16px] flex items-center gap-[10px] p-[12px] rounded-[10px] bg-[#71717a]/8 border border-[#71717a]/20 text-[13px] text-[#52525b]">
               <Check size={16} className="shrink-0" />
               <span>
-                <strong>{initialState.selectedPalettes.length} palettes</strong> pre-loaded from{" "}
+                <strong>{preloadedCount} palettes</strong> pre-loaded from{" "}
                 <strong>{sourceLibrary}</strong> explorer. You can adjust the selection below.
               </span>
             </div>

@@ -110,8 +110,9 @@ export function StepReview({ state }: StepReviewProps) {
       .reduce((sum, s) => sum + s.tokens.length, 0);
   }, [state.enabledFoundations]);
 
-  // Export code — merges color tokens + enabled foundation tokens
-  const getExportCode = () => {
+  // Export code — memoized; merges color tokens + enabled foundation tokens.
+  // Avoids re-running expensive JSON.parse/stringify on every render.
+  const exportCode = useMemo(() => {
     const hasFdn = state.enabledFoundations.length > 0;
 
     switch (exportFormat) {
@@ -121,7 +122,8 @@ export function StepReview({ state }: StepReviewProps) {
         return base + "\n" + foundationTokensToCSS(state.enabledFoundations);
       }
       case "scss": {
-        const base = tokensToSCSS(tokens, state.naming);
+        // tokensToSCSS no longer takes a naming param
+        const base = tokensToSCSS(tokens);
         if (!hasFdn) return base;
         // Reformat the CSS `:root { --var: val; }` block into SCSS `$var: val;` declarations
         const fdnCss = foundationTokensToCSS(state.enabledFoundations);
@@ -158,10 +160,10 @@ export function StepReview({ state }: StepReviewProps) {
       case "js":
         return tokensToJS(tokens);
     }
-  };
+  }, [exportFormat, tokens, state.enabledFoundations, state.naming]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(getExportCode());
+    await navigator.clipboard.writeText(exportCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -169,7 +171,7 @@ export function StepReview({ state }: StepReviewProps) {
   const handleDownload = () => {
     const fmt = FORMAT_OPTIONS.find((f) => f.id === exportFormat);
     const name = `design-tokens${fmt?.ext || ".txt"}`;
-    const blob = new Blob([getExportCode()], { type: "text/plain" });
+    const blob = new Blob([exportCode], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -385,7 +387,7 @@ export function StepReview({ state }: StepReviewProps) {
           {/* Code preview */}
           <div className="bg-[#0A0A0A] max-h-[320px] overflow-auto p-[16px]">
             <pre className="text-[11px] leading-[1.7] text-[#d4d4d8] whitespace-pre overflow-x-auto">
-              {getExportCode()}
+              {exportCode}
             </pre>
           </div>
 
